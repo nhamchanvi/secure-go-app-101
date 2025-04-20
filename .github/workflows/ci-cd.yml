@@ -47,13 +47,18 @@ jobs:
       # Scans the Go code for potential security vulnerabilities.
       - name: Run Gosec Security Scanner
         run: |
+          echo "--- Cleaning Go Cache ---"
+          go clean -cache
+          go clean -modcache
+          echo "--- Installing Gosec v2.20.0 ---"
           # Install a specific, stable version of gosec
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.20.0 # Replace v2.20.0 with the desired stable tag
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.20.0 
           echo "--- Gosec Version Info ---"
-          gosec --version # Verify the installed version
+          gosec --version # Verify the installed version should NOT be 'dev'
           echo "--- Running Gosec Scan ---"
-          # Exclude G114, explicitly fail if any other issues (like G101) are found.
-          gosec -no-fail ./...
+          # Run WITHOUT -no-fail. Exclude only G114.
+          # It should exit non-zero (fail) if it finds G101.
+          gosec -exclude=G114 ./... 
           echo "--- Gosec Scan Finished ---"
 
       # --- Optional: Upload Gosec SARIF results ---
