@@ -53,7 +53,7 @@ jobs:
           gosec --version # Verify the installed version
           echo "--- Running Gosec Scan ---"
           # Exclude G114, explicitly fail if any other issues (like G101) are found.
-          gosec -exclude=G114 -exit-code=1 ./...
+          gosec -exclude=G114 -severity low -confidence low ./...
           echo "--- Gosec Scan Finished ---"
 
       # --- Optional: Upload Gosec SARIF results ---
