@@ -47,16 +47,14 @@ jobs:
       # Scans the Go code for potential security vulnerabilities.
       - name: Run Gosec Security Scanner
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-          # Run gosec on all packages (`./...`)
-          # -exit-code=1 makes the job fail if gosec finds any issues.
-          # Remove or adjust severity/confidence levels (-sev medium -conf high) if needed.
-          gosec --version # Optional: Verify version
+          # Install a specific, stable version of gosec
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.20.0 # Replace v2.20.0 with the desired stable tag
+          echo "--- Gosec Version Info ---"
+          gosec --version # Verify the installed version
+          echo "--- Running Gosec Scan ---"
+          # Exclude G114, explicitly fail if any other issues (like G101) are found.
           gosec -exclude=G114 -exit-code=1 ./...
-
-          # --- Optional: Generate SARIF report for GitHub Security tab ---
-          # gosec -fmt=sarif -out=gosec-results.sarif ./...
-          # echo "Gosec scan complete. Results in gosec-results.sarif (if generated)."
+          echo "--- Gosec Scan Finished ---"
 
       # --- Optional: Upload Gosec SARIF results ---
       # Uncomment the following block to upload gosec results to GitHub Security tab
