@@ -7,8 +7,7 @@ import (
 	"os"
 )
 
-// Deliberate flaw for SAST tool to find later
-// const hardcodedApiKey = "dummy-go-key-9876"
+
 
 func helloHandler(w http.ResponseWriter, r *http.Request) {
 	// Load the API Key from environment variable within the handler
@@ -55,7 +54,7 @@ func main() {
 		log.Printf("TLS cert and key files not found in env vars. Starting HTTP server on port %s\n", port)
 		// This might still be flagged by Semgrep if the rule is strict,
 		// but it addresses the finding by attempting TLS first.
-		if err := http.ListenAndServe(addr, nil); err != nil {
+		if err := http.ListenAndServeTLS(addr, certFile, keyFile, nil); err != nil {
 			log.Fatalf("Error starting HTTP server: %s\n", err)
 		}
 	}
