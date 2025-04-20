@@ -1,0 +1,174 @@
+# Workflow name
+name: Go DevSecOps CI/CD Pipeline
+
+# Trigger: Run on push events to the main branch
+on:
+  push:
+    branches: [ main ]
+  # Optional: Allow manual triggering from the GitHub UI
+  workflow_dispatch:
+
+# Define environment variables for consistency (Optional but recommended)
+env:
+  GO_VERSION: '^1.24' # Specify desired Go version range (e.g., 1.21, ^1.22)
+  # --- Replace with your actual registry and image name ---
+  # Example for GitHub Container Registry (GHCR):
+  # REGISTRY: ghcr.io
+  # IMAGE_NAME: ${{ github.repository }} # format: owner/repo
+  # Example for Docker Hub:
+  REGISTRY: docker.io # Or your specific registry URL
+  IMAGE_NAME: nhamchanvi/secure-go-app-101 # Replace!
+  # --- End Replace ---
+
+jobs:
+  # ==================
+  # Lint and Test Job
+  # ==================
+  # Runs linters, tests (if any), SAST, and SCA scans on the source code
+  lint_and_test:
+    name: Lint, Test & Scan Code
+    runs-on: ubuntu-latest # Use the latest Ubuntu runner
+
+    steps:
+      # 1. Checkout Code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Set up Go Environment
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          # Optional: Cache Go modules to speed up subsequent runs
+          cache: true 
+          # cache-dependency-path: go.sum # Uncomment if you want explicit path
+
+      # 3. Run SAST Scan (gosec)
+      # Scans the Go code for potential security vulnerabilities.
+      - name: Run Gosec Security Scanner
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          # Run gosec on all packages (`./...`)
+          # -exit-code=1 makes the job fail if gosec finds any issues.
+          # Remove or adjust severity/confidence levels (-sev medium -conf high) if needed.
+          gosec -exit-code=1 ./...
+
+          # --- Optional: Generate SARIF report for GitHub Security tab ---
+          # gosec -fmt=sarif -out=gosec-results.sarif ./...
+          # echo "Gosec scan complete. Results in gosec-results.sarif (if generated)."
+
+      # --- Optional: Upload Gosec SARIF results ---
+      # Uncomment the following block to upload gosec results to GitHub Security tab
+      # Requires generating the SARIF file in the previous step.
+      # - name: Upload Gosec results to GitHub Security
+      #   uses: github/codeql-action/upload-sarif@v3
+      #   # Run this step even if the previous Gosec step failed (to upload findings)
+      #   if: always() 
+      #   with:
+      #     sarif_file: gosec-results.sarif
+      #     category: gosec # Optional: Category for the analysis in GitHub Security tab
+
+      # 4. Run SCA Scan (Trivy for Go Modules)
+      # Scans go.mod/go.sum for known vulnerabilities in dependencies.
+      - name: Run Trivy Vulnerability Scanner for Go Modules
+        uses: aquasecurity/trivy-action@master # Consider pinning to a specific version e.g., @0.18.0
+        with:
+          scan-type: 'fs' # Scan the filesystem
+          scan-ref: '.'   # Scan the current directory checked out
+          format: 'table' # Output format
+          scanners: 'vuln' # Specify scanners (vuln for vulnerabilities)
+          # severity: 'HIGH,CRITICAL' # Optional: Filter vulnerabilities by severity
+          # ignore-unfixed: true     # Optional: Only report vulnerabilities with fixes
+          exit-code: '1' # Fail the pipeline if vulnerabilities are found (Security Gate)
+          # Skip directories/files not relevant to Go modules if necessary
+          trivy-args: '--skip-dirs .git --skip-files Dockerfile' 
+
+  # ============================
+  # Build and Scan Image Job
+  # ============================
+  # Builds the Docker image and scans it for vulnerabilities
+  build_and_scan_image:
+    name: Build & Scan Docker Image
+    runs-on: ubuntu-latest
+    # This job depends on the 'lint_and_test' job finishing successfully
+    needs: lint_and_test
+
+    steps:
+      # 1. Checkout Code (Needed again for Docker build context)
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Set up Docker Buildx (Recommended for better builder features)
+      - name: Set up QEMU (for multi-platform builds, optional but good practice)
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3. Log in to Container Registry
+      # Use secrets for credentials. GITHUB_TOKEN works for GHCR.
+      # For Docker Hub, use secrets.DOCKERHUB_USERNAME and secrets.DOCKERHUB_TOKEN
+      # For other registries, adjust accordingly.
+      - name: Log in to Registry
+        uses: docker/login-action@v3
+        with:
+          # --- Adjust login based on your registry ---
+          registry: ${{ env.REGISTRY }} 
+          username: ${{ secrets.DOCKERHUB_USERNAME }} # Use GitHub Secrets
+          password: ${{ secrets.DOCKERHUB_TOKEN }}    # Use GitHub Secrets
+          # Example for GHCR:
+          # registry: ${{ env.REGISTRY }}
+          # username: ${{ github.actor }}
+          # password: ${{ secrets.GITHUB_TOKEN }} 
+          # --- End Adjust ---
+
+      # 4. Build and Push Docker Image
+      # Uses the Dockerfile in the repository root.
+      # Tags the image with the Git SHA and 'latest'.
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: . # Use the current directory as build context
+          file: ./Dockerfile # Explicitly state Dockerfile path (optional if root)
+          push: true # Push the image to the registry
+          tags: | # Define image tags
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest 
+          # Optional: Add build arguments, cache settings etc.
+          # cache-from: type=gha
+          # cache-to: type=gha,mode=max
+
+      # 5. Scan Container Image (Trivy)
+      # Scans the built Docker image for OS package vulnerabilities and secrets.
+      - name: Scan Container Image with Trivy
+        uses: aquasecurity/trivy-action@master # Consider pinning to a specific version
+        with:
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}' # Scan the specific image just built
+          format: 'table'
+          scan-type: 'image'
+          scanners: 'vuln,secret' # Scan for both vulnerabilities and secrets
+          ignore-unfixed: true # Optional: Ignore vulnerabilities without available fixes
+          severity: 'HIGH,CRITICAL' # Only report High and Critical severity issues
+          exit-code: '1' # Fail the pipeline if High/Critical vulnerabilities or secrets are found (Security Gate)
+
+  # ==================
+  # Deploy Job (Optional)
+  # ==================
+  # Placeholder for deployment logic. Triggered only after successful build/scan on main branch.
+  deploy:
+    name: Deploy Application
+    runs-on: ubuntu-latest
+    # Depends on the 'build_and_scan_image' job finishing successfully
+    needs: build_and_scan_image
+    # Optional: Only run deploy step for pushes to the main branch
+    # if: github.ref == 'refs/heads/main' 
+
+    steps:
+      - name: Placeholder Deployment Step
+        run: |
+          echo "Deployment would happen here..."
+          echo "Image to deploy: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          # Add your actual deployment commands here
+          # Example: kubectl apply -f deployment.yaml
+          # Example: ssh user@server 'docker pull ... && docker run ...'
+          # Example: aws ecs update-service ...
+          # Example: gcloud run deploy ...
