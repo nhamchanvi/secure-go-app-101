@@ -43,37 +43,50 @@ jobs:
           cache: true 
           # cache-dependency-path: go.sum # Uncomment if you want explicit path
 
-      # 3. Run SAST Scan (gosec)
-      # Scans the Go code for potential security vulnerabilities.
-      - name: Run Gosec Security Scanner
+      # 3. Run SAST Scan (gosec) - Currently encountering internal errors
+      - name: Run Gosec Security Scanner (Attempt)
+        # Keep the existing gosec step for now, but it's expected to fail due to internal error
+        # You might want to add 'continue-on-error: true' if you don't want it to block the pipeline
+        # Or comment it out entirely later if Semgrep works well.
+        continue-on-error: true # Allow pipeline to continue even if gosec crashes
         run: |
-          GORELEASE_TAG=v2.20.0  # Version tag for URL path
-          GORELEASE_VER=2.20.0   # Version number for filename
-          GOOS_ARCH=linux_amd64  # Assuming runner is linux/amd64
-
+          GORELEASE_TAG=v2.20.0
+          GORELEASE_VER=2.20.0
+          GOOS_ARCH=linux_amd64
           FILENAME="gosec_${GORELEASE_VER}_${GOOS_ARCH}.tar.gz"
           DOWNLOAD_URL="https://github.com/securego/gosec/releases/download/${GORELEASE_TAG}/${FILENAME}"
-
           echo "--- Downloading Gosec ${GORELEASE_TAG} Binary ---"
-          echo "URL: ${DOWNLOAD_URL}"
-          # Download the specific release binary from GitHub
           wget "${DOWNLOAD_URL}"
-          # Extract the binary
           tar -xzf "${FILENAME}"
-          # Optional: Verify downloaded file exists
-          ls -l gosec
-          # Make it executable
           chmod +x ./gosec
-          # Move it to a directory in the system's PATH for easy execution
           sudo mv ./gosec /usr/local/bin/gosec
-
           echo "--- Gosec Version Info ---"
-          gosec --version # Verify the installed version - SHOULD now be v2.20.0
+          gosec --version
           echo "--- Running Gosec Scan ---"
-          # Run WITHOUT -no-fail. Exclude only G114.
-          # It should exit non-zero (fail) if it finds G101.
           gosec -exclude=G114 ./...
           echo "--- Gosec Scan Finished ---"
+
+      # 4. Run SAST Scan (Semgrep) - More robust alternative
+      - name: Run Semgrep SAST Scanner
+        uses: returntocorp/semgrep-action@v1
+        with:
+          # Use 'auto' to automatically detect languages and relevant rulesets,
+          # including Go and generic secrets detection (like G101).
+          config: auto
+          # Semgrep action fails by default if findings are detected.
+
+      # 5. Run SCA Scan (Trivy for Go Modules) - Renumbered step
+      # Scans go.mod/go.sum for known vulnerabilities in dependencies.
+      - name: Run Trivy Vulnerability Scanner for Go Modules
+        uses: aquasecurity/trivy-action@master 
+        with:
+          # ... (rest of Trivy config remains the same) ...
+          scan-type: 'fs' 
+          scan-ref: '.'   
+          format: 'table' 
+          scanners: 'vuln' 
+          exit-code: '1' 
+          trivy-args: '--skip-dirs .git --skip-files Dockerfile'
 
       # --- Optional: Upload Gosec SARIF results ---
       # Uncomment the following block to upload gosec results to GitHub Security tab
