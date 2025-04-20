@@ -47,18 +47,28 @@ jobs:
       # Scans the Go code for potential security vulnerabilities.
       - name: Run Gosec Security Scanner
         run: |
-          echo "--- Cleaning Go Cache ---"
-          go clean -cache
-          go clean -modcache
-          echo "--- Installing Gosec v2.20.0 ---"
-          # Install a specific, stable version of gosec
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.20.0 
+          GORELEASE=v2.20.0 # Define the target stable version
+          GOOS_ARCH=linux_amd64 # Assuming runner is linux/amd64, adjust if needed
+
+          echo "--- Downloading Gosec ${GORELEASE} Binary ---"
+          # Download the specific release binary from GitHub
+          wget https://github.com/securego/gosec/releases/download/${GORELEASE}/gosec_${GORELEASE}_${GOOS_ARCH}.tar.gz
+          # Extract the binary
+          tar -xzf gosec_${GORELEASE}_${GOOS_ARCH}.tar.gz
+          # Optional: Verify downloaded file exists
+          ls -l gosec
+          # Make it executable
+          chmod +x ./gosec
+          # Move it to a directory in the system's PATH for easy execution
+          # Alternatively, execute using ./gosec in the command below
+          sudo mv ./gosec /usr/local/bin/gosec 
+
           echo "--- Gosec Version Info ---"
-          gosec --version # Verify the installed version should NOT be 'dev'
+          gosec --version # Verify the installed version - SHOULD now be v2.20.0
           echo "--- Running Gosec Scan ---"
           # Run WITHOUT -no-fail. Exclude only G114.
           # It should exit non-zero (fail) if it finds G101.
-          gosec -exclude=G114 ./... 
+          gosec -exclude=G114 ./...
           echo "--- Gosec Scan Finished ---"
 
       # --- Optional: Upload Gosec SARIF results ---
