@@ -72,7 +72,7 @@ jobs:
         with:
           # Use 'auto' to automatically detect languages and relevant rulesets,
           # including Go and generic secrets detection (like G101).
-          config: auto
+          config: p/golang p/secrets
           # Semgrep action fails by default if findings are detected.
 
       # 5. Run SCA Scan (Trivy for Go Modules) - Renumbered step
