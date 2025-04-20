@@ -10,7 +10,7 @@ on:
 
 # Define environment variables for consistency (Optional but recommended)
 env:
-  GO_VERSION: '^1.24' # Specify desired Go version range (e.g., 1.21, ^1.22)
+  GO_VERSION: '^1.22' # Specify desired Go version range (e.g., 1.21, ^1.22)
   # --- Replace with your actual registry and image name ---
   # Example for GitHub Container Registry (GHCR):
   # REGISTRY: ghcr.io
