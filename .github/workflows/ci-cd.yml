@@ -47,21 +47,25 @@ jobs:
       # Scans the Go code for potential security vulnerabilities.
       - name: Run Gosec Security Scanner
         run: |
-          GORELEASE=v2.20.0 # Define the target stable version
-          GOOS_ARCH=linux_amd64 # Assuming runner is linux/amd64, adjust if needed
+          GORELEASE_TAG=v2.20.0  # Version tag for URL path
+          GORELEASE_VER=2.20.0   # Version number for filename
+          GOOS_ARCH=linux_amd64  # Assuming runner is linux/amd64
 
-          echo "--- Downloading Gosec ${GORELEASE} Binary ---"
+          FILENAME="gosec_${GORELEASE_VER}_${GOOS_ARCH}.tar.gz"
+          DOWNLOAD_URL="https://github.com/securego/gosec/releases/download/${GORELEASE_TAG}/${FILENAME}"
+
+          echo "--- Downloading Gosec ${GORELEASE_TAG} Binary ---"
+          echo "URL: ${DOWNLOAD_URL}"
           # Download the specific release binary from GitHub
-          wget https://github.com/securego/gosec/releases/download/${GORELEASE}/gosec_${GORELEASE}_${GOOS_ARCH}.tar.gz
+          wget "${DOWNLOAD_URL}"
           # Extract the binary
-          tar -xzf gosec_${GORELEASE}_${GOOS_ARCH}.tar.gz
+          tar -xzf "${FILENAME}"
           # Optional: Verify downloaded file exists
           ls -l gosec
           # Make it executable
           chmod +x ./gosec
           # Move it to a directory in the system's PATH for easy execution
-          # Alternatively, execute using ./gosec in the command below
-          sudo mv ./gosec /usr/local/bin/gosec 
+          sudo mv ./gosec /usr/local/bin/gosec
 
           echo "--- Gosec Version Info ---"
           gosec --version # Verify the installed version - SHOULD now be v2.20.0
